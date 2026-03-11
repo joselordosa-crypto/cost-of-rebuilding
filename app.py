@@ -3,24 +3,14 @@ import pandas as pd
 import pdfplumber
 from difflib import SequenceMatcher
 
-# --- The App Header ---
+# --- Page Config & Branding ---
 st.set_page_config(page_title="Vantix Scope Engine", layout="wide")
 st.title("🏗️ The Cost of Rebuilding")
-st.write("Detecting discrepancies between Carrier and Contractor estimates.")
+st.write("Match estimates and identify missing supplement items.")
 
 # --- Helper Functions ---
 def get_similarity(a, b):
     return SequenceMatcher(None, str(a).upper(), str(b).upper()).ratio()
-
-def clean_df(df):
-    """Basic cleaning to remove empty rows and headers from PDF tables"""
-    df = df.dropna(how='all') # Remove empty rows
-    return df.reset_index(drop=True)
-
-# --- File Uploader Sidebar ---
-st.sidebar.header("Step 1: Upload Estimates")
-carrier_file = st.sidebar.file_uploader("1. Carrier Estimate (PDF)", type=["pdf"])
-contractor_file = st.sidebar.file_uploader("2. Contractor Bid (PDF)", type=["pdf"])
 
 def extract_data(uploaded_file):
     all_rows = []
@@ -29,64 +19,67 @@ def extract_data(uploaded_file):
             table = page.extract_table()
             if table:
                 all_rows.extend(table)
-    return clean_df(pd.DataFrame(all_rows))
+    df = pd.DataFrame(all_rows)
+    # Clean up: Remove rows that are entirely empty
+    df = df.dropna(how='all').reset_index(drop=True)
+    return df
 
-# --- Main Interface Logic ---
+# --- Sidebar: File Uploads ---
+st.sidebar.header("1. Upload Estimates")
+carrier_file = st.sidebar.file_uploader("Carrier PDF", type=["pdf"])
+contractor_file = st.sidebar.file_uploader("Contractor PDF", type=["pdf"])
+
+# --- Main Logic ---
 if carrier_file and contractor_file:
-    st.success("✅ Both files received!")
-    
-    # Extract data
     df_car = extract_data(carrier_file)
     df_con = extract_data(contractor_file)
 
-    # --- Step 2: Run Comparison ---
+    st.success("✅ Files Uploaded Successfully")
+
+    # --- Step 2: Column Selection ---
+    st.header("2. Map Your Columns")
+    st.info("Select which columns contain the Item Descriptions and the Total Prices.")
+    
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.subheader("Carrier Column Mapping")
+        car_desc_col = st.selectbox("Carrier: Description Column", options=df_car.columns, index=0)
+        car_price_col = st.selectbox("Carrier: Total Price Column", options=df_car.columns, index=min(len(df_car.columns)-1, 1))
+
+    with col2:
+        st.subheader("Contractor Column Mapping")
+        con_desc_col = st.selectbox("Contractor: Description Column", options=df_con.columns, index=0)
+        con_price_col = st.selectbox("Contractor: Total Price Column", options=df_con.columns, index=min(len(df_con.columns)-1, 1))
+
+    # --- Step 3: Run Analysis ---
     st.divider()
     if st.button("🚀 Run Comparison Analysis"):
         comparison_results = []
         
-        # We assume the first column is the Description
-        # In a production app, we would use AI to identify columns accurately
-        carrier_items = df_car.iloc[:, 0].astype(str).tolist()
+        # Get list of carrier items for matching
+        carrier_items = df_car[car_desc_col].astype(str).tolist()
         
         for _, con_row in df_con.iterrows():
-            con_desc = str(con_row.iloc[0])
+            con_desc = str(con_row[con_desc_col])
+            con_price = str(con_row[con_price_col])
             
-            # Find the best fuzzy match in the carrier list
+            # Find best fuzzy match
             best_match = None
             highest_score = 0
-            
             for car_item in carrier_items:
                 score = get_similarity(con_desc, car_item)
                 if score > highest_score:
                     highest_score = score
                     best_match = car_item
             
-            # Decide if it's a match or a missing item (Threshold 0.6)
-            if highest_score > 0.6:
-                status = "✅ Match Found"
-                variance_note = f"Matches: {best_match}"
+            # Identify Status
+            if highest_score > 0.65:
+                status = "✅ Match"
+                ref = best_match
             else:
-                status = "🚨 Missing / Supplement"
-                variance_note = "No similar item in Carrier scope"
+                status = "🚨 Missing"
+                ref = "Potential Supplement"
 
             comparison_results.append({
-                "Contractor Item": con_desc,
-                "Status": status,
-                "Confidence": f"{int(highest_score * 100)}%",
-                "Carrier Reference": variance_note
-            })
-
-        # Display results
-        res_df = pd.DataFrame(comparison_results)
-        
-        st.header("Discrepancy Report")
-        
-        # Color Coding the Status
-        def color_status(val):
-            color = 'red' if 'Missing' in val else 'green'
-            return f'background-color: {color}; color: white'
-
-        st.table(res_df.style.applymap(color_status, subset=['Status']))
-
-elif carrier_file or contractor_file:
-    st.info("Waiting for the second file...")
+                "Contractor Item
