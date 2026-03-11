@@ -5,41 +5,53 @@ import pdfplumber
 # --- The App Header ---
 st.set_page_config(page_title="Vantix Scope Engine", layout="wide")
 st.title("🏗️ The Cost of Rebuilding")
-st.subheader("Compare Carrier Estimates vs. Contractor Bids")
+st.write("Upload both estimates to identify discrepancies.")
 
-# --- File Uploader Section ---
-st.sidebar.header("Upload Files")
-carrier_file = st.sidebar.file_uploader("Upload Carrier PDF (Xactimate/Symbility)", type=["pdf"])
+# --- File Uploader Sidebar ---
+st.sidebar.header("Step 1: Upload Estimates")
 
-# --- The "Brain": Extracting Data from the PDF ---
-def extract_pdf_data(uploaded_file):
-    all_data = []
+# Uploader 1: Carrier
+carrier_file = st.sidebar.file_uploader("1. Carrier Estimate (PDF)", type=["pdf"])
+
+# Uploader 2: Contractor
+contractor_file = st.sidebar.file_uploader("2. Contractor Bid (PDF)", type=["pdf"])
+
+# --- The Extraction Engine ---
+def extract_data(uploaded_file):
+    all_rows = []
     with pdfplumber.open(uploaded_file) as pdf:
         for page in pdf.pages:
             table = page.extract_table()
             if table:
-                # This turns the PDF table into a list we can work with
-                all_data.extend(table)
-    return pd.DataFrame(all_data)
+                all_rows.extend(table)
+    return pd.DataFrame(all_rows)
 
-# --- App Logic ---
-if carrier_file is not None:
-    st.success(f"Loaded: {carrier_file.name}")
+# --- Main Interface Logic ---
+if carrier_file and contractor_file:
+    st.success("✅ Both files received!")
     
-    # Run the extraction
-    raw_data = extract_pdf_data(carrier_file)
+    # Create two columns to show the files side-by-side
+    col1, col2 = st.columns(2)
     
-    # Show the raw data so you can see it working
-    st.write("### Data Extracted from PDF:")
-    st.dataframe(raw_data)
-    
-    # Placeholder for the Comparison Logic (from previous steps)
-    st.info("Next Step: The app will now match these lines against your contractor bid.")
+    with col1:
+        st.subheader("Carrier Data")
+        df_carrier = extract_data(carrier_file)
+        st.dataframe(df_carrier, height=300)
+        
+    with col2:
+        st.subheader("Contractor Data")
+        df_contractor = extract_data(contractor_file)
+        st.dataframe(df_contractor, height=300)
+
+    # --- Step 2: Run Comparison ---
+    st.divider()
+    if st.button("🚀 Run Comparison Analysis"):
+        st.balloons()
+        st.header("Comparison Report")
+        st.info("The app is now looking for matching line items between the two files...")
+        # (This is where the Fuzzy Matching logic from earlier will live)
+
+elif carrier_file or contractor_file:
+    st.info("Waiting for the second file... Please upload both to begin the analysis.")
 else:
-    st.warning("Please upload a Carrier Estimate PDF in the sidebar to begin.")
-    
-    # Show how it looks with demo data if no file is uploaded
-    st.write("---")
-    st.write("### How it works:")
-    st.image("https://streamlit.io/images/brand/streamlit-mark-color.png", width=100)
-    st.write("1. Upload your Carrier PDF.\n2. Upload your Contractor Estimate.\n3. See the red/green variance report instantly.")
+    st.warning("Please upload the Carrier PDF and the Contractor PDF in the sidebar.")
