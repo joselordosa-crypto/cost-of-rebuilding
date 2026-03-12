@@ -23,7 +23,8 @@ TRANSLATION_DICT = {
     "R&R": "Remove and Replace",
     "D&R": "Detach and Reset",
     "PER SF": "",
-    "CONSTRUCTION": ""
+    "CONSTRUCTION": "",
+    "Vapor barrier - visqueen - 6mil": "Laminate Floor, Underlayment, Good"
 }
 
 def translate_codes(text):
@@ -50,7 +51,7 @@ contractor_file = st.sidebar.file_uploader("Contractor Bid (PDF)", type=["pdf"])
 
 if carrier_file and contractor_file and api_key:
     if st.button("🚀 Run AI Analysis"):
-        with st.spinner("Calculating the net discrepancy..."):
+        with st.spinner("Calculating net discrepancies..."):
             carrier_text = extract_text(carrier_file)
             contractor_text = extract_text(contractor_file)
 
@@ -61,7 +62,6 @@ if carrier_file and contractor_file and api_key:
 
             SECTION 1: DISCREPANCY TABLE
             Find items present in BOTH estimates where the Contractor is higher, OR items in the Contractor bid that are standard labor/materials missing from the Carrier.
-            Calculate the exact difference for each line.
             Columns: Item | Contractor $ | Carrier $ | Difference ($)
 
             SECTION 2: SUPPLEMENT & CODE UPGRADES
@@ -82,27 +82,32 @@ if carrier_file and contractor_file and api_key:
 
             full_report = response.choices[0].message.content
 
-            # --- Calculation Logic for Discrepancy Only ---
-            # We split the report to only calculate math from Section 1
+            # --- Calculation Logic ---
+            # Isolate Section 1 to ensure math is only done on discrepancies
             report_sections = full_report.split("SECTION 2")
             discrepancy_section = report_sections[0]
             
-            # Find all numbers in the 'Difference' column of Section 1
-            diff_amounts = re.findall(r'\|\s*[\d,]+\.?\d*\s*\|\s*[\d,]+\.?\d*\s*\|\s*([\d,]+\.?\d*)\s*\|', discrepancy_section)
+            # Robust Regex: Finds numbers in the 4th column, handles commas, dollar signs, and decimals
+            diff_amounts = re.findall(r'\|\s*[^|]*\|\s*[^|]*\|\s*[^|]*\|\s*[\$\s]*([\d,]+\.?\d*)\s*\|', discrepancy_section)
             
             total_discrepancy = 0
             for amt in diff_amounts:
                 try:
-                    total_discrepancy += float(amt.replace(',', ''))
-                except:
+                    # Strip commas and convert to float
+                    clean_amt = float(amt.replace(',', ''))
+                    total_discrepancy += clean_amt
+                except ValueError:
                     continue
 
-            # --- Results Display ---
+            # --- Results Display (Single Line Totals) ---
             st.divider()
             
-            st.metric(label="Total Discrepancy Amount", value=f"${total_discrepancy:,.2f}", 
-                      help="The sum of all line-item price and quantity differences.")
+            # This creates a single line for both totals
+            m1, m2 = st.columns(2)
+            m1.metric(label="Total Financial Gap", value=f"${total_discrepancy:,.2f}")
+            m2.metric(label="Total Discrepancy Amount", value=f"${total_discrepancy:,.2f}", help="Total calculated from the difference column.")
             
+            st.divider()
             st.header("Discrepancy Analysis (Carrier vs. Contractor)")
             st.markdown(discrepancy_section.replace("SECTION 1:", ""))
             
