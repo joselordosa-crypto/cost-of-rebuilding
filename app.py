@@ -33,13 +33,15 @@ if carrier_file and contractor_file and api_key:
             
             # THE PROMPT: We ask for a specific format so we can extract the numbers later
             prompt = f"""
-            Compare these two insurance estimates. 
-            Identify every item in the CONTRACTOR estimate that is MISSING or UNDERPAID in the CARRIER estimate.
+            As an expert Insurance Appraiser, your task is to reconcile these two estimates. 
             
-            Format your response EXACTLY as a Markdown table with these columns:
-            Item | Status | Difference ($) | Reason
+            CRITICAL INSTRUCTION: Carrier estimates often use shorthand codes (e.g., 'RFG 3ARSH' for '3-Tab Shingle' or 'DRY 1/2' for 'Drywall'). 
+            Even if the descriptions use different words, if they represent the SAME physical work or material, mark them as a MATCH.
             
-            For the 'Difference ($)' column, provide ONLY the number (e.g., 1250.50).
+            Only flag an item as '🚨 Missing' if the carrier has truly omitted the scope of work entirely.
+            
+            Format your response as a Markdown table:
+            Item | Status | Difference ($) | Reason | Match Confidence (%)
             
             CARRIER ESTIMATE:
             {carrier_text[:5000]}
