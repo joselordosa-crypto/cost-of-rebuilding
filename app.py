@@ -8,27 +8,39 @@ import re
 st.set_page_config(page_title="Vantix AI Scope Engine", layout="wide")
 st.title("🏗️ Vantix Appraisal & Supplement Engine")
 
-# --- 1. THE TRANSLATION DICTIONARY ---
-# You can add new shorthand codes here as you encounter them!
+# --- 1. EXPANDED TRANSLATION DICTIONARY ---
 TRANSLATION_DICT = {
-    "RFG 3ARSH": "Roofing 3-Tab Shingles",
-    "RFG DRIP": "Roofing Drip Edge",
-    "RFG 30LB": "Roofing Felt - 30 lb",
-    "RFG VAL": "Roofing Valley Metal",
-    "DRY 1/2": "Drywall - 1/2 inch",
-    "DRY 5/8": "Drywall - 5/8 inch",
-    "FCO WD": "Floor Covering - Wood",
-    "FNC TRIM": "Finish Carpentry - Trim",
-    "DMO GEN": "General Demolition",
-    "WTR DRY": "Water Mitigation - Drying",
-    "PNTP": "Paint - Prime & Paint",
-    # Add as many as you need...
+    # Cleaning & Labor Synonyms
+    "Final cleaning -construction": "Final Clean",
+    "Final Clean, Per SF": "Final Clean",
+    "Construction Clean": "Final Clean",
+    "CLNR": "Cleaning",
+    "CLN": "Cleaning",
+    
+    # Roofing Synonyms
+    "RFG": "Roofing", 
+    "3ARSH": "3-Tab Shingles", 
+    "LAMSH": "Laminated Shingles",
+    "COMP": "Composition Shingles",
+    "DRIP": "Drip Edge",
+    
+    # General Logic
+    "R&R": "Remove and Replace",
+    "D&R": "Detach and Reset",
+    "PER SF": "", # Remove 'Per SF' so it doesn't confuse the matcher
+    "CONSTRUCTION": "" # Remove 'Construction' to get to the core word 'Clean'
 }
 
+# --- 2. COMMON SUPPLEMENT CHECKLIST ---
+# The AI will now specifically look for these commonly missed items.
+SUPPLEMENT_CHECKLIST = [
+    "High-Profile Ridge Caps", "Drip Edge (Code Required)", "Ice & Water Shield",
+    "Step Flashing", "Furnace Vent/Rain Caps", "Valley Metal", "Pipe Jacks",
+    "OSB Sheathing", "Steep Charges", "High Roof Charges"
+]
+
 def translate_codes(text):
-    """Replaces shorthand codes with full descriptions from the dictionary."""
     for code, full_name in TRANSLATION_DICT.items():
-        # Using regex to ensure we only replace the exact code word
         text = re.sub(rf'\b{code}\b', full_name, text, flags=re.IGNORECASE)
     return text
 
@@ -41,7 +53,6 @@ def extract_text(uploaded_file):
         for page in pdf.pages:
             content = page.extract_text()
             if content:
-                # APPLY TRANSLATION DURING EXTRACTION
                 text += translate_codes(content) + "\n"
     return text
 
@@ -52,24 +63,23 @@ contractor_file = st.sidebar.file_uploader("Contractor Bid (PDF)", type=["pdf"])
 
 if carrier_file and contractor_file and api_key:
     if st.button("🚀 Run AI Comparison"):
-        with st.spinner("Translating codes and analyzing..."):
+        with st.spinner("Analyzing scopes and hunting for supplements..."):
             carrier_text = extract_text(carrier_file)
             contractor_text = extract_text(contractor_file)
 
             client = openai.OpenAI(api_key=api_key)
             
-            # THE PROMPT: Telling the AI we've already helped it with translations
+            # THE PROMPT: Explicitly mentioning the supplement list
             prompt = f"""
-            You are an expert Insurance Appraiser. 
-            Compare these two estimates. I have already pre-processed some shorthand codes into full text.
+            As an expert Insurance Appraiser, reconcile these estimates. 
             
-            TASK: 
-            1. Match items based on the SCOPE of work, even if the wording is slightly different.
-            2. Identify items in the CONTRACTOR estimate that are missing or under-calculated in the CARRIER estimate.
-            3. If an item is a 'Match', do not list it in the table. ONLY list discrepancies.
+            CRITICAL: 
+            1. Use 'Semantic Matching': Match items by intent/scope even if words differ (e.g. 'Drip' vs 'Drip Edge').
+            2. Supplement Hunter: Specifically check if these items are in the Contractor bid but MISSING from the Carrier: {', '.join(SUPPLEMENT_CHECKLIST)}.
+            3. Accuracy: If the Carrier quantity is lower than the Contractor, list the dollar difference.
 
-            Format as a Markdown table:
-            Item | Contractor Value | Carrier Value | Difference ($) | Reason
+            Output ONLY a Markdown table with these columns:
+            Item | Contractor $ | Carrier $ | Difference ($) | Status (Match/Underpaid/Missing) | Reason
             
             CARRIER ESTIMATE:
             {carrier_text[:6000]}
@@ -80,15 +90,19 @@ if carrier_file and contractor_file and api_key:
 
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
-                messages=[{"role": "user", "content": prompt}]
+                messages=[{"role": "system", "content": "You are a professional insurance appraiser. Your math must be exact."},
+                          {"role": "user", "content": prompt}]
             )
 
             result_text = response.choices[0].message.content
 
             # --- Calculation Logic ---
-            all_amounts = re.findall(r'\|\s*([\d,]+\.?\d*)\s*\|', result_text)
+            all_amounts = re.findall(r'\|\s*([\d,]+\.?\d*)\s*\|\s*[\w\s/]+Match', result_text) # Only grab non-matches
+            # For simplicity, we extract the 'Difference' column values
+            diff_amounts = re.findall(r'\|\s*[^|]*\|\s*[^|]*\|\s*([\d,]+\.?\d*)\s*\|', result_text)
+            
             total_gap = 0
-            for amt in all_amounts:
+            for amt in diff_amounts:
                 try:
                     total_gap += float(amt.replace(',', ''))
                 except:
@@ -97,8 +111,8 @@ if carrier_file and contractor_file and api_key:
             # --- Results Display ---
             st.divider()
             st.metric(label="Total Potential Appraisal Amount", value=f"${total_gap:,.2f}")
-            st.header("Discrepancy Report")
+            st.header("Discrepancy & Supplement Report")
             st.markdown(result_text)
 
 elif not api_key:
-    st.warning("Please enter your OpenAI API Key in the sidebar.")
+    st.warning("Please enter your OpenAI API Key.")
