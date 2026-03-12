@@ -50,22 +50,23 @@ contractor_file = st.sidebar.file_uploader("Contractor Bid (PDF)", type=["pdf"])
 
 if carrier_file and contractor_file and api_key:
     if st.button("🚀 Run AI Analysis"):
-        with st.spinner("Analyzing and separating code upgrades..."):
+        with st.spinner("Calculating the net discrepancy..."):
             carrier_text = extract_text(carrier_file)
             contractor_text = extract_text(contractor_file)
 
             client = openai.OpenAI(api_key=api_key)
             
             prompt = f"""
-            Act as an Insurance Appraiser. Compare these estimates and provide TWO separate tables.
+            Act as an Insurance Appraiser. Your goal is to find the net financial gap between these two estimates.
 
-            TABLE 1: GENERAL DISCREPANCIES
-            Include items that exist in both but have price/qty differences, or standard labor items missing from the carrier.
-            Columns: Item | Contractor $ | Carrier $ | Difference ($) | Reason
+            SECTION 1: DISCREPANCY TABLE
+            Find items present in BOTH estimates where the Contractor is higher, OR items in the Contractor bid that are standard labor/materials missing from the Carrier.
+            Calculate the exact difference for each line.
+            Columns: Item | Contractor $ | Carrier $ | Difference ($)
 
-            TABLE 2: CODE UPGRADES & SUPPLEMENTS
-            Include items required by building code or manufacturer specs that the carrier OMITTED (e.g., Drip Edge, Ice & Water, Shingle Starter, Ridge Vents, Flashings).
-            Columns: Supplement Item | Estimated Cost ($) | Code/Requirement Note
+            SECTION 2: SUPPLEMENT & CODE UPGRADES
+            List items that are entirely new supplements or code-required upgrades found in the Contractor's scope but absent in the Carrier's.
+            Columns: Supplement Item | Estimated Cost ($) | Reason
 
             CARRIER ESTIMATE:
             {carrier_text[:6000]}
@@ -81,30 +82,34 @@ if carrier_file and contractor_file and api_key:
 
             full_report = response.choices[0].message.content
 
-            # --- Logic to extract the dollar gap for the header ---
-            diff_amounts = re.findall(r'\|\s*[^|]*\|\s*[^|]*\|\s*[^|]*\|\s*([\d,]+\.?\d*)\s*\|', full_report)
-            total_gap = 0
+            # --- Calculation Logic for Discrepancy Only ---
+            # We split the report to only calculate math from Section 1
+            report_sections = full_report.split("SECTION 2")
+            discrepancy_section = report_sections[0]
+            
+            # Find all numbers in the 'Difference' column of Section 1
+            diff_amounts = re.findall(r'\|\s*[\d,]+\.?\d*\s*\|\s*[\d,]+\.?\d*\s*\|\s*([\d,]+\.?\d*)\s*\|', discrepancy_section)
+            
+            total_discrepancy = 0
             for amt in diff_amounts:
                 try:
-                    total_gap += float(amt.replace(',', ''))
+                    total_discrepancy += float(amt.replace(',', ''))
                 except:
                     continue
 
             # --- Results Display ---
             st.divider()
-            st.metric(label="Total Potential Appraisal Amount", value=f"${total_gap:,.2f}")
             
-            # Split the report by the table headers defined in the prompt
-            if "TABLE 2" in full_report:
-                parts = full_report.split("TABLE 2")
-                st.header("General Discrepancy Report")
-                st.markdown(parts[0].replace("TABLE 1:", ""))
-                
+            st.metric(label="Total Discrepancy Amount", value=f"${total_discrepancy:,.2f}", 
+                      help="The sum of all line-item price and quantity differences.")
+            
+            st.header("Discrepancy Analysis (Carrier vs. Contractor)")
+            st.markdown(discrepancy_section.replace("SECTION 1:", ""))
+            
+            if len(report_sections) > 1:
                 st.divider()
-                st.header("✨ Potential Supplement & Code Upgrade Chart")
-                st.markdown(parts[1].replace("CODE UPGRADES & SUPPLEMENTS:", ""))
-            else:
-                st.markdown(full_report)
+                st.header("✨ Potential Supplement & Code Upgrades")
+                st.markdown(report_sections[1].replace("SUPPLEMENT & CODE UPGRADES:", ""))
 
 elif not api_key:
     st.warning("Please enter your OpenAI API Key.")
