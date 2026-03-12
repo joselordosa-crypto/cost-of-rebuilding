@@ -9,26 +9,18 @@ st.set_page_config(page_title="Vantix AI Scope Engine", layout="wide")
 st.title("🏗️ Vantix Appraisal & Supplement Engine")
 
 # --- 1. EXPANDED TRANSLATION DICTIONARY ---
+# These are the standard Xactimate/Symbility category codes.
 TRANSLATION_DICT = {
-    # Cleaning & Labor Synonyms
-    "Final cleaning -construction": "Final Clean",
-    "Final Clean, Per SF": "Final Clean",
-    "Construction Clean": "Final Clean",
-    "CLNR": "Cleaning",
-    "CLN": "Cleaning",
-    
-    # Roofing Synonyms
-    "RFG": "Roofing", 
-    "3ARSH": "3-Tab Shingles", 
-    "LAMSH": "Laminated Shingles",
-    "COMP": "Composition Shingles",
-    "DRIP": "Drip Edge",
-    
-    # General Logic
-    "R&R": "Remove and Replace",
-    "D&R": "Detach and Reset",
+    "RFG": "Roofing", "SFG": "Soffit/Fascia/Gutter", "DRY": "Drywall",
+    "PNT": "Painting", "PNTP": "Paint - Prep & Paint", "WTR": "Water Remediation",
+    "FNC": "Finish Carpentry", "FCW": "Floor Wood", "FCT": "Floor Ceramic Tile",
+    "DMO": "General Demolition", "ELE": "Electrical", "PLM": "Plumbing",
+    "HVC": "HVAC", "INS": "Insulation", "SDG": "Siding",
+    "3ARSH": "3-Tab Shingles", "LAMSH": "Laminated Shingles", "HIP": "Hip & Ridge Cap",
+    "DRIP": "Drip Edge", "VAL": "Valley Metal", "Felt": "Underlayment",
+    "1/2": "0.5 inch", "5/8": "0.625 inch", "R&R": "Remove and Replace"
+    "Final cleaning -construction": "Final Clean"
     "PER SF": "", # Remove 'Per SF' so it doesn't confuse the matcher
-    "CONSTRUCTION": "" # Remove 'Construction' to get to the core word 'Clean'
 }
 
 # --- 2. COMMON SUPPLEMENT CHECKLIST ---
