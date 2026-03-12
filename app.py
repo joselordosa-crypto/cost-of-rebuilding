@@ -19,6 +19,8 @@ TRANSLATION_DICT = {
     "3ARSH": "3-Tab Shingles", "LAMSH": "Laminated Shingles", "HIP": "Hip & Ridge Cap",
     "DRIP": "Drip Edge", "VAL": "Valley Metal", "Felt": "Underlayment",
     "1/2": "0.5 inch", "5/8": "0.625 inch", "R&R": "Remove and Replace"
+    
+    # General Logic
     "Final cleaning -construction": "Final Clean"
     "PER SF": "", # Remove 'Per SF' so it doesn't confuse the matcher
 }
