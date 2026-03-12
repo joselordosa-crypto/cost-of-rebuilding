@@ -8,26 +8,23 @@ import re
 st.set_page_config(page_title="Vantix AI Scope Engine", layout="wide")
 st.title("🏗️ Vantix Appraisal & Supplement Engine")
 
-# --- 1. EXPANDED TRANSLATION DICTIONARY ---
-# These are the standard Xactimate/Symbility category codes.
+# --- 1. THE TRANSLATION DICTIONARY ---
 TRANSLATION_DICT = {
-    "RFG": "Roofing", "SFG": "Soffit/Fascia/Gutter", "DRY": "Drywall",
-    "PNT": "Painting", "PNTP": "Paint - Prep & Paint", "WTR": "Water Remediation",
-    "FNC": "Finish Carpentry", "FCW": "Floor Wood", "FCT": "Floor Ceramic Tile",
-    "DMO": "General Demolition", "ELE": "Electrical", "PLM": "Plumbing",
-    "HVC": "HVAC", "INS": "Insulation", "SDG": "Siding",
-    "3ARSH": "3-Tab Shingles", "LAMSH": "Laminated Shingles", "HIP": "Hip & Ridge Cap",
-    "DRIP": "Drip Edge", "VAL": "Valley Metal", "Felt": "Underlayment",
-    "1/2": "0.5 inch", "5/8": "0.625 inch", "R&R": "Remove and Replace"
+    "Final cleaning -construction": "Final Clean",
+    "Final Clean, Per SF": "Final Clean",
+    "Construction Clean": "Final Clean",
+    "CLNR": "Cleaning",
+    "CLN": "Cleaning",
+    "RFG": "Roofing", 
+    "3ARSH": "3-Tab Shingles", 
+    "LAMSH": "Laminated Shingles",
+    "COMP": "Composition Shingles",
+    "DRIP": "Drip Edge",
+    "R&R": "Remove and Replace",
+    "D&R": "Detach and Reset",
+    "PER SF": "",
+    "CONSTRUCTION": ""
 }
-
-# --- 2. COMMON SUPPLEMENT CHECKLIST ---
-# The AI will now specifically look for these commonly missed items.
-SUPPLEMENT_CHECKLIST = [
-    "High-Profile Ridge Caps", "Drip Edge (Code Required)", "Ice & Water Shield",
-    "Step Flashing", "Furnace Vent/Rain Caps", "Valley Metal", "Pipe Jacks",
-    "OSB Sheathing", "Steep Charges", "High Roof Charges"
-]
 
 def translate_codes(text):
     for code, full_name in TRANSLATION_DICT.items():
@@ -52,45 +49,40 @@ carrier_file = st.sidebar.file_uploader("Carrier Estimate (PDF)", type=["pdf"])
 contractor_file = st.sidebar.file_uploader("Contractor Bid (PDF)", type=["pdf"])
 
 if carrier_file and contractor_file and api_key:
-    if st.button("🚀 Run AI Comparison"):
-        with st.spinner("Analyzing scopes and hunting for supplements..."):
+    if st.button("🚀 Run AI Analysis"):
+        with st.spinner("Analyzing and separating code upgrades..."):
             carrier_text = extract_text(carrier_file)
             contractor_text = extract_text(contractor_file)
 
             client = openai.OpenAI(api_key=api_key)
             
-            # THE PROMPT: Explicitly mentioning the supplement list
             prompt = f"""
-            As an expert Insurance Appraiser, reconcile these estimates. 
-            
-            CRITICAL: 
-            1. Use 'Semantic Matching': Match items by intent/scope even if words differ (e.g. 'Drip' vs 'Drip Edge').
-            2. Supplement Hunter: Specifically check if these items are in the Contractor bid but MISSING from the Carrier: {', '.join(SUPPLEMENT_CHECKLIST)}.
-            3. Accuracy: If the Carrier quantity is lower than the Contractor, list the dollar difference.
+            Act as an Insurance Appraiser. Compare these estimates and provide TWO separate tables.
 
-            Output ONLY a Markdown table with these columns:
-            Item | Contractor $ | Carrier $ | Difference ($) | Status (Match/Underpaid/Missing) | Reason
-            
+            TABLE 1: GENERAL DISCREPANCIES
+            Include items that exist in both but have price/qty differences, or standard labor items missing from the carrier.
+            Columns: Item | Contractor $ | Carrier $ | Difference ($) | Reason
+
+            TABLE 2: CODE UPGRADES & SUPPLEMENTS
+            Include items required by building code or manufacturer specs that the carrier OMITTED (e.g., Drip Edge, Ice & Water, Shingle Starter, Ridge Vents, Flashings).
+            Columns: Supplement Item | Estimated Cost ($) | Code/Requirement Note
+
             CARRIER ESTIMATE:
             {carrier_text[:6000]}
-            
+
             CONTRACTOR ESTIMATE:
             {contractor_text[:6000]}
             """
 
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
-                messages=[{"role": "system", "content": "You are a professional insurance appraiser. Your math must be exact."},
-                          {"role": "user", "content": prompt}]
+                messages=[{"role": "user", "content": prompt}]
             )
 
-            result_text = response.choices[0].message.content
+            full_report = response.choices[0].message.content
 
-            # --- Calculation Logic ---
-            all_amounts = re.findall(r'\|\s*([\d,]+\.?\d*)\s*\|\s*[\w\s/]+Match', result_text) # Only grab non-matches
-            # For simplicity, we extract the 'Difference' column values
-            diff_amounts = re.findall(r'\|\s*[^|]*\|\s*[^|]*\|\s*([\d,]+\.?\d*)\s*\|', result_text)
-            
+            # --- Logic to extract the dollar gap for the header ---
+            diff_amounts = re.findall(r'\|\s*[^|]*\|\s*[^|]*\|\s*[^|]*\|\s*([\d,]+\.?\d*)\s*\|', full_report)
             total_gap = 0
             for amt in diff_amounts:
                 try:
@@ -101,8 +93,18 @@ if carrier_file and contractor_file and api_key:
             # --- Results Display ---
             st.divider()
             st.metric(label="Total Potential Appraisal Amount", value=f"${total_gap:,.2f}")
-            st.header("Discrepancy & Supplement Report")
-            st.markdown(result_text)
+            
+            # Split the report by the table headers defined in the prompt
+            if "TABLE 2" in full_report:
+                parts = full_report.split("TABLE 2")
+                st.header("General Discrepancy Report")
+                st.markdown(parts[0].replace("TABLE 1:", ""))
+                
+                st.divider()
+                st.header("✨ Potential Supplement & Code Upgrade Chart")
+                st.markdown(parts[1].replace("CODE UPGRADES & SUPPLEMENTS:", ""))
+            else:
+                st.markdown(full_report)
 
 elif not api_key:
     st.warning("Please enter your OpenAI API Key.")
