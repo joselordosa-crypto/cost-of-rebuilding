@@ -18,10 +18,7 @@ TRANSLATION_DICT = {
     "HVC": "HVAC", "INS": "Insulation", "SDG": "Siding",
     "3ARSH": "3-Tab Shingles", "LAMSH": "Laminated Shingles", "HIP": "Hip & Ridge Cap",
     "DRIP": "Drip Edge", "VAL": "Valley Metal", "Felt": "Underlayment",
-    "1/2": "0.5 inch", "5/8": "0.625 inch", "R&R": "Remove and Replace",
-    "Final cleaning -construction": "Final Clean",
-    "PER SF": "",
-    "CONSTRUCTION": ""
+    "1/2": "0.5 inch", "5/8": "0.625 inch", "R&R": "Remove and Replace"
 }
 
 # --- 2. COMMON SUPPLEMENT CHECKLIST ---
