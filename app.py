@@ -48,7 +48,7 @@ if carrier_file and contractor_file and api_key:
             """
 
             response = client.chat.completions.create(
-                model="gpt-4o", # Or gpt-3.5-turbo for cheaper/faster
+                model="gpt-4o-mini", # The cost-saving model
                 messages=[{"role": "user", "content": prompt}]
             )
 
