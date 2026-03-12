@@ -24,7 +24,7 @@ TRANSLATION_DICT = {
     "D&R": "Detach and Reset",
     "PER SF": "",
     "CONSTRUCTION": "",
-    "Vapor barrier - visqueen - 6mil": "Laminate Floor, Underlayment, Good"
+    "Vapor barrier -visqueen -6mil": "Laminate Floor Underlayment"
 }
 
 def translate_codes(text):
@@ -51,21 +51,21 @@ contractor_file = st.sidebar.file_uploader("Contractor Bid (PDF)", type=["pdf"])
 
 if carrier_file and contractor_file and api_key:
     if st.button("🚀 Run AI Analysis"):
-        with st.spinner("Calculating net discrepancies..."):
+        with st.spinner("Analyzing and calculating totals..."):
             carrier_text = extract_text(carrier_file)
             contractor_text = extract_text(contractor_file)
 
             client = openai.OpenAI(api_key=api_key)
             
             prompt = f"""
-            Act as an Insurance Appraiser. Your goal is to find the net financial gap between these two estimates.
+            Act as an Insurance Appraiser. Compare these estimates.
 
             SECTION 1: DISCREPANCY TABLE
-            Find items present in BOTH estimates where the Contractor is higher, OR items in the Contractor bid that are standard labor/materials missing from the Carrier.
+            Find items in both estimates where the Contractor is higher or Carrier is missing a standard line.
             Columns: Item | Contractor $ | Carrier $ | Difference ($)
 
             SECTION 2: SUPPLEMENT & CODE UPGRADES
-            List items that are entirely new supplements or code-required upgrades found in the Contractor's scope but absent in the Carrier's.
+            List items that are entirely new supplements or code upgrades.
             Columns: Supplement Item | Estimated Cost ($) | Reason
 
             CARRIER ESTIMATE:
@@ -83,32 +83,31 @@ if carrier_file and contractor_file and api_key:
             full_report = response.choices[0].message.content
 
             # --- Calculation Logic ---
-            # Isolate Section 1 to ensure math is only done on discrepancies
             report_sections = full_report.split("SECTION 2")
             discrepancy_section = report_sections[0]
             
-            # Robust Regex: Finds numbers in the 4th column, handles commas, dollar signs, and decimals
+            # Robust extraction: looks for numbers in the last column of the discrepancy table
             diff_amounts = re.findall(r'\|\s*[^|]*\|\s*[^|]*\|\s*[^|]*\|\s*[\$\s]*([\d,]+\.?\d*)\s*\|', discrepancy_section)
             
             total_discrepancy = 0
             for amt in diff_amounts:
                 try:
-                    # Strip commas and convert to float
-                    clean_amt = float(amt.replace(',', ''))
-                    total_discrepancy += clean_amt
+                    total_discrepancy += float(amt.replace(',', ''))
                 except ValueError:
                     continue
 
-            # --- Results Display (Single Line Totals) ---
+            # --- Results Display (The Single Line Layout) ---
             st.divider()
             
-            # This creates a single line for both totals
-            m1, m2 = st.columns(2)
-            m1.metric(label="Total Financial Gap", value=f"${total_discrepancy:,.2f}")
-            m2.metric(label="Total Discrepancy Amount", value=f"${total_discrepancy:,.2f}", help="Total calculated from the difference column.")
+            # This layout puts both metrics on one horizontal line
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric(label="Total Financial Gap", value=f"${total_discrepancy:,.2f}")
+            with col2:
+                st.metric(label="Total Discrepancy Amount", value=f"${total_discrepancy:,.2f}")
             
             st.divider()
-            st.header("Discrepancy Analysis (Carrier vs. Contractor)")
+            st.header("Discrepancy Analysis")
             st.markdown(discrepancy_section.replace("SECTION 1:", ""))
             
             if len(report_sections) > 1:
