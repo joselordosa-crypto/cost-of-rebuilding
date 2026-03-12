@@ -6,101 +6,82 @@ from difflib import SequenceMatcher
 # --- Page Config ---
 st.set_page_config(page_title="Vantix Scope Engine", layout="wide")
 st.title("🏗️ The Cost of Rebuilding")
-st.write("Aggressive extraction mode enabled: Reading all tables from all pages.")
+st.write("Deep Scan Mode: Reading all text layers from the estimate.")
 
 # --- Helper Functions ---
 def get_similarity(a, b):
     return SequenceMatcher(None, str(a).upper(), str(b).upper()).ratio()
 
-def extract_data(uploaded_file):
-    """Robust extraction for PDFs and CSVs"""
-    if uploaded_file.name.endswith('.csv'):
-        return pd.read_csv(uploaded_file)
-    
-    all_rows = []
+def extract_all_text_lines(uploaded_file):
+    """Reads every line of text from the PDF, even if not in a table"""
+    all_lines = []
     try:
         with pdfplumber.open(uploaded_file) as pdf:
             for page in pdf.pages:
-                # 'extract_tables' (plural) gets EVERYTHING on the page
-                tables = page.extract_tables()
-                for table in tables:
-                    if table:
-                        all_rows.extend(table)
+                # Extract words and group them into lines by their vertical position
+                text = page.extract_text()
+                if text:
+                    for line in text.split('\n'):
+                        # Only keep lines that look like they have data (longer than 10 chars)
+                        if len(line.strip()) > 10:
+                            all_lines.append([line.strip()])
         
-        df = pd.DataFrame(all_rows)
-        # Drop rows that are completely empty
-        df = df.dropna(how='all').reset_index(drop=True)
+        df = pd.DataFrame(all_lines, columns=["Full Line Text"])
         return df
     except Exception as e:
-        st.error(f"Error reading file: {e}")
+        st.error(f"Error reading PDF: {e}")
         return pd.DataFrame()
 
 # --- Sidebar ---
-st.sidebar.header("1. Upload Files")
-carrier_file = st.sidebar.file_uploader("Carrier Estimate (PDF or CSV)", type=["pdf", "csv"])
-contractor_file = st.sidebar.file_uploader("Contractor Bid (PDF or CSV)", type=["pdf", "csv"])
+st.sidebar.header("1. Upload Estimates")
+carrier_file = st.sidebar.file_uploader("Carrier Estimate (PDF)", type=["pdf"])
+contractor_file = st.sidebar.file_uploader("Contractor Bid (PDF)", type=["pdf"])
 
 if carrier_file and contractor_file:
-    df_car = extract_data(carrier_file)
-    df_con = extract_data(contractor_file)
+    df_car = extract_all_text_lines(carrier_file)
+    df_con = extract_all_text_lines(contractor_file)
 
     if not df_car.empty and not df_con.empty:
-        st.success(f"Extracted {len(df_car)} rows from Carrier and {len(df_con)} rows from Contractor.")
+        st.success(f"Successfully read {len(df_car)} lines from Carrier and {len(df_con)} lines from Contractor.")
 
-        # --- Step 2: Column Selection ---
-        st.header("2. Map Your Columns")
-        st.info("Since PDFs have many columns, pick the one that contains the item descriptions.")
-        
-        col1, col2 = st.columns(2)
-
-        with col1:
-            st.subheader("Carrier Column Mapping")
-            car_desc_col = st.selectbox("Carrier: Description", options=df_car.columns, key="car_desc")
-            car_price_col = st.selectbox("Carrier: Price", options=df_car.columns, index=min(len(df_car.columns)-1, 1), key="car_price")
-            st.write("First 5 rows:", df_car[[car_desc_col]].head(5))
-
-        with col2:
-            st.subheader("Contractor Column Mapping")
-            con_desc_col = st.selectbox("Contractor: Description", options=df_con.columns, key="con_desc")
-            con_price_col = st.selectbox("Contractor: Price", options=df_con.columns, index=min(len(df_con.columns)-1, 1), key="con_price")
-            st.write("First 5 rows:", df_con[[con_desc_col]].head(5))
-
-        # --- Step 3: Run Analysis ---
-        if st.button("🚀 Run Full Comparison"):
+        # --- Step 2: Run Analysis ---
+        st.header("2. Discrepancy Analysis")
+        if st.button("🚀 Compare All Lines"):
             results = []
-            # Fuzzy match every contractor line against the carrier list
-            car_list = df_car[car_desc_col].astype(str).tolist()
+            carrier_text_list = df_car["Full Line Text"].tolist()
             
             for _, con_row in df_con.iterrows():
-                c_text = str(con_row[con_desc_col])
-                c_price = str(con_row[con_price_col])
+                con_line = str(con_row["Full Line Text"])
                 
-                # Basic filter: Skip very short rows (likely page headers/junk)
-                if len(c_text) < 5: continue 
-
                 best_match = "No Match Found"
                 top_score = 0
-                for item in car_list:
-                    score = get_similarity(c_text, item)
+                
+                for car_line in carrier_text_list:
+                    score = get_similarity(con_line, car_line)
                     if score > top_score:
                         top_score = score
-                        best_match = item
+                        best_match = car_line
                 
-                status = "✅ Match" if top_score > 0.6 else "🚨 Missing / Supplement"
+                # Logic: If similarity is low, it's likely a missing supplement
+                status = "✅ Match" if top_score > 0.5 else "🚨 Potential Supplement"
                 
                 results.append({
-                    "Contractor Item": c_text,
-                    "Price": c_price,
-                    "Match Status": status,
-                    "Closest Carrier Match": best_match,
-                    "Match Score": f"{int(top_score*100)}%"
+                    "Contractor Scope Line": con_line,
+                    "Status": status,
+                    "Carrier Match": best_match if top_score > 0.5 else "N/A",
+                    "Similarity": f"{int(top_score*100)}%"
                 })
 
-            st.header("Comparison Results")
             res_df = pd.DataFrame(results)
-            st.dataframe(res_df, use_container_width=True)
+            
+            # Displaying the results with coloring
+            def color_status(val):
+                color = 'red' if val == "🚨 Potential Supplement" else 'green'
+                return f'color: {color}'
+
+            st.dataframe(res_df.style.applymap(color_status, subset=['Status']), use_container_width=True)
     else:
-        st.error("One of the files appears to be empty or unreadable.")
+        st.error("The app could not find any text in one of these PDFs. Ensure they are not scanned 'images' of documents.")
 
 elif carrier_file or contractor_file:
-    st.info("Waiting for both files to begin.")
+    st.info("Waiting for both files...")
