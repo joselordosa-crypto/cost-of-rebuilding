@@ -8,33 +8,22 @@ import re
 st.set_page_config(page_title="Vantix AI Scope Engine", layout="wide")
 st.title("🏗️ Vantix Appraisal & Supplement Engine")
 
-# --- 1. EXPANDED TRANSLATION DICTIONARY ---
-# These are the standard Xactimate/Symbility category codes.
+# --- 1. THE TRANSLATION DICTIONARY ---
 TRANSLATION_DICT = {
-    # Cleaning & Labor Synonyms
     "Final cleaning -construction": "Final Clean",
     "Final Clean, Per SF": "Final Clean",
     "Construction Clean": "Final Clean",
     "CLNR": "Cleaning",
     "CLN": "Cleaning",
-    
-    # Roofing Synonyms
     "RFG": "Roofing", 
     "3ARSH": "3-Tab Shingles", 
     "LAMSH": "Laminated Shingles",
     "COMP": "Composition Shingles",
     "DRIP": "Drip Edge",
-    
-    # General Logic
     "R&R": "Remove and Replace",
     "D&R": "Detach and Reset",
-    "PER SF": "", # Remove 'Per SF' so it doesn't confuse the matcher
-    "CONSTRUCTION": "" # Remove 'Construction' to get to the core word 'Clean'
-}
-    
-    # General Logic
-    "Final cleaning -construction": "Final Clean"
-    "PER SF": "", # Remove 'Per SF' so it doesn't confuse the matcher
+    "PER SF": "",
+    "CONSTRUCTION": ""
 }
 
 # --- 2. COMMON SUPPLEMENT CHECKLIST ---
